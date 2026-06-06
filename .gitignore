@@ -1,0 +1,9 @@
+# Binaries and build artifacts
+build/
+bin/
+*.exe
+*.test
+*.prof
+
+# OS files
+.DS_Store

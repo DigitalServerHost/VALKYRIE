@@ -1,0 +1,23 @@
+{
+  "circuit_name": "analog_range_bounded_matmul",
+  "proving_system": "Bulletproofs / Vector Commitments",
+  "parameters": {
+    "dimensions": "N x N x N",
+    "hardware_drift_sigma": 0.05,
+    "confidence_level": 0.95,
+    "z_critical_value": 1.96,
+    "max_allowed_error_bound": 0.098
+  },
+  "constraints": {
+    "description": "zk-Bounded range validation checking for analog electrical charge variations",
+    "formula": "|C_observed[i][j] - (A * B)_ideal[i][j]| <= z_critical_value * hardware_drift_sigma",
+    "statistical_confidence_bound": "1 - alpha = 0.95",
+    "range_proof_type": "Multi-range Inner Product Argument",
+    "public_inputs": [
+      "input_a_commitment",
+      "input_b_commitment",
+      "output_c_commitment",
+      "max_allowed_error_bound"
+    ]
+  }
+}
