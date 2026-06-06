@@ -162,7 +162,7 @@ docker run -d -p 9001:9001 --name valkyrie-service valkyrie-proxy
 
 ## 📖 Detailed Production Architecture
 
-For a deep-dive analysis of deployment topologies (sidecar vs. asymmetrical mesh), multi-stage Docker sandboxing, game-theoretic tokenomics, and 3-way matrix sharding splits, refer to the [VALKYRIE Architectural Specification](docs/ARCHITECTURE.md).
+For a deep-dive analysis of deployment topologies (sidecar vs. asymmetrical mesh), multi-stage Docker sandboxing, and 3-way matrix sharding splits, refer to the [VALKYRIE Architectural Specification](docs/ARCHITECTURE.md).
 
 ---
 

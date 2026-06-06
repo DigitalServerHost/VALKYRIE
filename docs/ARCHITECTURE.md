@@ -177,84 +177,6 @@ sequenceDiagram
 
 ---
 
-## 🪙 Game-Theoretic Tokenomics & Slashing Dynamics
-
-To enforce honest participation in the geometric overlap audit zones, RAMNET applies an incentive loop powered by task reward splits and staked security bonds. This game-theoretic design prevents worker fraud, malicious challenges (griefing), and unpaid verification.
-
-### Node Stake Requirements
-Before joining the mesh, nodes must lock a **Security Stake (Stake)** in RAMNET tokens:
-- **Workers (Nodes A, B, C):** Must stake $S_W$ (Worker Bond) to receive computational task shards.
-- **Challengers (Nodes A, B, C acting as auditors):** Must stake $S_C$ (Challenge Bond) to submit audit contestations to the L3 layer.
-- **Resolvers (Node D - VALKYRIE):** Must stake $S_R$ (Resolver Bond) to receive proof compilation requests.
-
----
-
-### 🟢 The Happy Path
-Under normal, honest network operation:
-1.  A task creator submits a compute task and deposits the **Task Reward Pool** ($R_{\text{total}}$).
-2.  The scheduler shards the task across at least three workers: **Worker A**, **Worker B**, and **Worker C**.
-3.  Each worker processes exactly $1/3$ of the matrix task, creating natural geometric intersections (e.g., $\frac{M}{3} \times \frac{N}{3}$ sub-grid).
-4.  Workers verify adjacent overlaps. If all overlaps match, the transaction settles.
-5.  Each worker is paid exactly $1/3$ of the Task Reward Pool ($R_{\text{worker}} = R_{\text{total}} / 3$) directly from the task creator's tokens.
-6.  **Node D (VALKYRIE Resolver) is never invoked**, incurring zero computational prover overhead and zero fees.
-
----
-
-### 🔴 The Unhappy Path (Dispute Settlement)
-
-If adjacent overlap states diverge (e.g. Node A detects a mismatch on Node B's overlap) and a challenge is registered, **Node D (VALKYRIE Resolver)** is triggered to compile and verify a ZK/range proof of the disputed segment.
-
-#### Outcome 1: Worker Fraud Confirmed (Worker B Cheated, Challenger C is Correct)
-*VALKYRIE verifier shows Worker B's computation violates mathematical constraints.*
-- **Worker B Penalty:** 
-  - Worker B forfeits its $1/3$ task reward share ($R_{\text{worker}}$).
-  - Worker B's staked Worker Bond ($S_W$) is fully slashed.
-  - Worker B is temporarily suspended (Timed Out) from the scheduling mesh.
-- **Redistribution of Worker B's Reward Share ($R_{\text{worker}}$):**
-  - **90%** ($0.9 \cdot R_{\text{worker}}$) is paid to **Resolver D** to cover ZK-proving compute costs.
-  - **10%** ($0.1 \cdot R_{\text{worker}}$) is paid to **Challenger C** as a reward for identifying fraud.
-- **Redistribution of Worker B's Slashed Bond ($S_W$):**
-  - Paid out as a **bonus extra** on top of the reward shares to compensate **Resolver D** and **Challenger C** for the dispute overhead.
-
-#### Outcome 2: False Contestation Defeated (Worker B is Correct, Challenger C Griefed)
-*VALKYRIE verifier shows Worker B's computation was mathematically correct.*
-- **Challenger C Penalty:**
-  - Challenger C forfeits its $1/3$ task reward share ($R_{\text{worker}}$).
-  - Challenger C's Challenge Bond ($S_C$) is fully slashed.
-  - Challenger C is suspended and has its auditing reputation rating downgraded.
-- **Redistribution of Challenger C's Reward Share ($R_{\text{worker}}$):**
-  - **90%** ($0.9 \cdot R_{\text{worker}}$) is paid to **Resolver D** for proof compilation services.
-  - **10%** ($0.1 \cdot R_{\text{worker}}$) is paid to **Worker B** as compensation for settlement delay.
-- **Redistribution of Challenger C's Slashed Bond ($S_C$):**
-  - Paid out as a **bonus extra** to **Resolver D** and **Worker B** on top of their task reward shares.
-
-```text
-                     ┌──────────────────────────────┐
-                     │   Dispute Settlement Flow    │
-                     └──────────────┬───────────────┘
-                                    │
-                        [VALKYRIE Proof Compiled]
-                                    │
-                        Is Worker B Math Correct?
-                       /                         \
-                    YES                           NO
-                   /                               \
-     [Outcome 2: False Dispute]      [Outcome 1: True Dispute]
-     - Slash Challenger C Bond       - Slash Worker B Bond
-     - Splitting Challenger's Share: - Splitting Worker's Share:
-       * 10% to Worker B               * 10% to Challenger C
-       * 90% to Resolver D             * 90% to Resolver D
-     - Slashed Bond paid as extra    - Slashed Bond paid as extra
-       bonus to Worker B & Resolver D  bonus to Challenger C & Resolver D
-```
-
-### Strategic Benefits
-1.  **Anti-Griefing Failsafe:** Challengers cannot spam fake disputes against honest workers because they lose their entire challenge stake if the ZK-proof validates the worker's correctness.
-2.  **Self-Funded Auditing:** Prover nodes (VALKYRIE) are paid entirely by the party at fault (slashed stakes), ensuring no additional transaction tax is placed on normal users.
-3.  **Maximum Mesh Throughput:** Under normal honest network operation, no ZK proofs are compiled, allowing execution to run at raw ORCHID speeds with zero cryptographic overhead.
-
----
-
 ## 🌀 Global Task Scrambling & Functional Sharding
 
 To prevent a single node from reconstructing the complete execution context (which violates the **Logic-Data Decoupling** and **Blind Execution** mandates in the whitepaper), RAMNET aligns ORCHID's local **3-way memory roles** with a global **3-way dimensional sharding** scheme.
@@ -336,10 +258,8 @@ If any divergence is reported in this zone, a dispute is registered. **VALKYRIE 
 ---
 
 ## ⚡ Strategic Benefits
-1.  **Anti-Griefing Failsafe:** Challengers cannot spam fake disputes against honest workers because they lose their entire challenge stake if the ZK-proof validates the worker's correctness.
-2.  **Self-Funded Auditing:** Prover nodes (VALKYRIE) are paid entirely by the party at fault (slashed stakes), ensuring no additional transaction tax is placed on normal users.
-3.  **Maximum Mesh Throughput:** Under normal honest network operation, no ZK proofs are compiled, allowing execution to run at raw ORCHID speeds with zero cryptographic overhead.
-4.  **Mathematical Blind Execution:** By scrambling the Row, Column, and Reduction slices, no single node ever holds the full mathematical representation of the task, securing data privacy at the linear-algebra level.
+1.  **Maximum Mesh Throughput:** Under normal honest network operation, no ZK proofs are compiled, allowing execution to run at raw ORCHID speeds with zero cryptographic overhead.
+2.  **Mathematical Blind Execution:** By scrambling the Row, Column, and Reduction slices, no single node ever holds the full mathematical representation of the task, securing data privacy at the linear-algebra level.
 
 ---
 
@@ -392,11 +312,11 @@ When allocating tasks to the mesh, consumers can dynamically configure the targe
 To ensure mathematical security without compromising bare-metal throughput:
 1.  **Self-Audit Isolation:** Nodes executing a task slice can **never** validate their own work.
 2.  **Geometric Auditing:** Workers (Node A, Node B, Node C) check each other at their shared intersection boundary ($\Omega \approx 3.7\%$ of the task). If their outputs match, settlement is instant.
-3.  **Opt-In Validator Pool:** Nodes check an **"Opt-In to Validation"** setting, downloading the full cryptographic suite (including the **VALKYRIE ZK-proxy**). These nodes listen for network dispute events in exchange for verification rewards.
+3.  **Opt-In Validator Pool:** Nodes check an **"Opt-In to Validation"** setting, downloading the full cryptographic suite (including the **VALKYRIE ZK-proxy**). These nodes listen for network dispute events.
 4.  **Random Dispute Selection:** If an audit zone divergence occurs:
     *   The transaction is frozen.
     *   A VALKYRIE-enabled validator is chosen at random from the pool.
     *   The validator is sent only the tiny execution trace of the contested intersection $\Omega$.
     *   The validator runs VALKYRIE, compiling a ZK-proof or polynomial range check.
-    *   The protocol slashes the cheater's bond, rewards the challenger (10% bounty), and pays the validator for compiling the proof.
+    *   The protocol verifies the proof and resolves the dispute.
 
