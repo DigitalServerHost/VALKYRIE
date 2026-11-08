@@ -42,6 +42,11 @@ const (
 	taskURLFormat       = "http://localhost:%d/task"
 )
 
+// maxMatrixDim bounds the matrix dimension N accepted on /task. It guards against
+// a single request forcing O(N^2) memory and O(N^3) compute. Operators who need
+// larger matrices can raise it.
+const maxMatrixDim = 1024
+
 // Global trace hook helper
 type ProxyTraceHook struct {
 	LastMetadata jit.ExecutionMetadata
@@ -138,15 +143,35 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// prepareTaskData validates inputs and populates defaults for TaskRequest
-func prepareTaskData(req *TaskRequest) int {
+// prepareTaskData validates inputs and populates defaults for TaskRequest.
+// It returns the cell count (N*N) or an error if the request is malformed.
+//
+// Validation must happen before any allocation or kernel execution: the JIT
+// kernel indexes A, B and C by N through raw pointers with no bounds checks, so
+// operands shorter than N*N cause out-of-bounds native memory access, and an
+// unbounded N lets one request exhaust CPU and memory.
+func prepareTaskData(req *TaskRequest) (int, error) {
 	if req.TaskId == "" {
 		req.TaskId = fmt.Sprintf("task-%d", time.Now().UnixNano())
 	}
 	if req.N <= 0 {
 		req.N = 64
 	}
+	if req.N > maxMatrixDim {
+		return 0, fmt.Errorf("n=%d exceeds maximum supported matrix dimension %d", req.N, maxMatrixDim)
+	}
 	cells := req.N * req.N
+
+	// Any client-provided operand must match the declared dimension exactly.
+	if len(req.AData) != 0 && len(req.AData) != cells {
+		return 0, fmt.Errorf("a_data length %d does not match n*n=%d", len(req.AData), cells)
+	}
+	if len(req.BData) != 0 && len(req.BData) != cells {
+		return 0, fmt.Errorf("b_data length %d does not match n*n=%d", len(req.BData), cells)
+	}
+	if len(req.CData) != 0 && len(req.CData) != cells {
+		return 0, fmt.Errorf("c_data length %d does not match n*n=%d", len(req.CData), cells)
+	}
 
 	// Generate inputs if not provided
 	if len(req.AData) == 0 {
@@ -161,7 +186,7 @@ func prepareTaskData(req *TaskRequest) int {
 			req.BData[i] = int32((i*13 + 5)%7) - 3
 		}
 	}
-	return cells
+	return cells, nil
 }
 
 // executeJITKernel performs compilation and execution under JIT, capturing trace Hook metadata
@@ -216,7 +241,11 @@ func handleTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 1. Validate inputs
-	cells := prepareTaskData(&req)
+	cells, err := prepareTaskData(&req)
+	if err != nil {
+		http.Error(w, "Bad request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// 2. Perform zero-copy JIT execution with registered TraceHook
 	cSlice, err := executeJITKernel(req.N, req.AData, req.BData, req.CData, cells)
