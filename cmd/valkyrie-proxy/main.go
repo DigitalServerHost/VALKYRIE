@@ -13,8 +13,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 	"unsafe"
 
@@ -100,8 +102,20 @@ type VerifyResponse struct {
 	Reason string `json:"reason"`
 }
 
+// defaultBindHost keeps the proxy on the loopback interface unless an operator
+// explicitly opts into a wider interface (e.g. 0.0.0.0). The endpoints are
+// unauthenticated, so binding all interfaces by default would expose them to the
+// whole network.
+const defaultBindHost = "127.0.0.1"
+
+// listenAddr builds the bind address from a host and port.
+func listenAddr(host string, port int) string {
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
 func main() {
 	mode := flag.String("mode", "server", "Execution mode: server, test")
+	host := flag.String("host", defaultBindHost, "Host/interface to bind in server mode (use 0.0.0.0 to listen on all interfaces)")
 	port := flag.Int("port", 9001, "Port for the HTTP proxy daemon")
 	flag.Parse()
 
@@ -110,17 +124,17 @@ func main() {
 		return
 	}
 
-	runServer(*port)
+	runServer(*host, *port)
 }
 
-func runServer(port int) {
+func runServer(host string, port int) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", handleHealth)
 	mux.HandleFunc("/task", handleTask)
 	mux.HandleFunc("/verify", handleVerify)
 
-	addr := fmt.Sprintf(":%d", port)
-	fmt.Printf("%s🌌 VALKYRIE Proxy Wrapper%s running on port %d\n", ColorCyan, ColorReset, port)
+	addr := listenAddr(host, port)
+	fmt.Printf("%s🌌 VALKYRIE Proxy Wrapper%s running on %s\n", ColorCyan, ColorReset, addr)
 	fmt.Printf("%s[SYSTEM]%s Initializing Go-native dual-route ZK verification pipeline...\n", ColorBlue, ColorReset)
 
 	server := &http.Server{
@@ -519,7 +533,7 @@ func runIntegrationTest(port int) {
 
 	// Start server in background
 	go func() {
-		runServer(port)
+		runServer(defaultBindHost, port)
 	}()
 
 	// Wait for server to bind
