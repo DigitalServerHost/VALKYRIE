@@ -42,6 +42,18 @@ const (
 	taskURLFormat       = "http://localhost:%d/task"
 )
 
+// Request bounds for /verify. The endpoint derives the matrix dimension from the
+// operand lengths, so without a ceiling one request can drive the verifier's
+// O(N^3) recompute / O(N^2) probes and allocate unbounded memory while decoding.
+const (
+	// maxVerifyCells caps operand length at a 1024x1024 matrix (matching the
+	// dimension limit applied on /task).
+	maxVerifyCells = 1 << 20
+	// maxVerifyBodyBytes bounds the decoded request body so a huge payload cannot
+	// exhaust memory before the operand-size check runs.
+	maxVerifyBodyBytes = 64 << 20
+)
+
 // Global trace hook helper
 type ProxyTraceHook struct {
 	LastMetadata jit.ExecutionMetadata
@@ -275,14 +287,30 @@ func handleTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// checkVerifyOperandSizes rejects verification operands large enough to make the
+// subsequent commitment hashing and arithmetic checks a denial-of-service vector.
+func checkVerifyOperandSizes(a, b, c []int32) error {
+	if len(a) > maxVerifyCells || len(b) > maxVerifyCells || len(c) > maxVerifyCells {
+		return fmt.Errorf("verification operand exceeds maximum of %d elements", maxVerifyCells)
+	}
+	return nil
+}
+
 func handleVerify(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, msgMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxVerifyBodyBytes)
+
 	var req VerifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Bad request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := checkVerifyOperandSizes(req.AData, req.BData, req.CData); err != nil {
 		http.Error(w, "Bad request: "+err.Error(), http.StatusBadRequest)
 		return
 	}
