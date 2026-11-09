@@ -86,12 +86,17 @@ type TaskResponse struct {
 	Proof        *prover.Proof `json:"proof"`
 }
 
-// VerifyRequest defines input schema for /verify
+// VerifyRequest defines input schema for /verify.
+//
+// AuthorizedTier is the hardware tier the task was assigned, supplied by trusted
+// task metadata (the orchestrator), not by the worker's proof. The verifier
+// enforces it so a worker cannot downgrade a digital_exact task to analog_range.
 type VerifyRequest struct {
-	Proof *prover.Proof `json:"proof"`
-	AData []int32       `json:"a_data"`
-	BData []int32       `json:"b_data"`
-	CData []int32       `json:"c_data"`
+	Proof          *prover.Proof `json:"proof"`
+	AuthorizedTier string        `json:"authorized_tier"`
+	AData          []int32       `json:"a_data"`
+	BData          []int32       `json:"b_data"`
+	CData          []int32       `json:"c_data"`
 }
 
 // VerifyResponse defines output schema for /verify
@@ -338,7 +343,7 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	valid, err := verifier.VerifyProof(req.Proof, req.AData, req.BData, req.CData)
+	valid, err := verifier.VerifyProof(req.Proof, req.AuthorizedTier, req.AData, req.BData, req.CData)
 	w.Header().Set(headerContentType, mimeAppJSON)
 	if err != nil {
 		json.NewEncoder(w).Encode(VerifyResponse{
@@ -402,10 +407,11 @@ func testDigitalExactTask(client *http.Client, port int, n int, a, b []int32) *p
 func testVerifyDigitalProof(client *http.Client, port int, proof *prover.Proof, a, b, cIdeal []int32) {
 	fmt.Printf("\n%s[TEST]%s Step 3: Auditing ZK Proof at L3 Gate (/verify)...\n", ColorBlue, ColorReset)
 	verifyReq := VerifyRequest{
-		Proof: proof,
-		AData: a,
-		BData: b,
-		CData: cIdeal,
+		Proof:          proof,
+		AuthorizedTier: "digital_exact",
+		AData:          a,
+		BData:          b,
+		CData:          cIdeal,
 	}
 	reqBytes, _ := json.Marshal(verifyReq)
 	resp, err := client.Post(fmt.Sprintf("http://localhost:%d/verify", port), mimeAppJSON, bytes.NewBuffer(reqBytes))
@@ -460,10 +466,11 @@ func testAnalogRangeTask(client *http.Client, port int, n int, a, b, cAnalog []i
 func testVerifyAnalogProof(client *http.Client, port int, proof *prover.Proof, a, b, cAnalog []int32) {
 	fmt.Printf("\n%s[TEST]%s Step 5: Auditing Bounded Range Proof at L3 Gate (/verify)...\n", ColorBlue, ColorReset)
 	verifyReqAnalog := VerifyRequest{
-		Proof: proof,
-		AData: a,
-		BData: b,
-		CData: cAnalog,
+		Proof:          proof,
+		AuthorizedTier: "analog_range",
+		AData:          a,
+		BData:          b,
+		CData:          cAnalog,
 	}
 	reqBytes, _ := json.Marshal(verifyReqAnalog)
 	resp, err := client.Post(fmt.Sprintf("http://localhost:%d/verify", port), mimeAppJSON, bytes.NewBuffer(reqBytes))

@@ -22,10 +22,28 @@ import (
 // chance of accepting a wrong output is at most 2^-freivaldsRounds.
 const freivaldsRounds = 24
 
-// VerifyProof re-evaluates the commitments, signature, and cryptographic fields to assert proof validity
-func VerifyProof(proof *prover.Proof, a, b, c []int32) (bool, error) {
+// VerifyProof independently establishes that output C corresponds to inputs A, B
+// for the task's authorized hardware tier.
+//
+// authorizedTier must originate from trusted task metadata (e.g. the task
+// assignment), NOT from the proof: the proof's own HardwareTier is attacker
+// controlled, so a worker could otherwise downgrade a digital_exact task to the
+// looser analog_range check. VerifyProof requires the authorized tier, rejects a
+// proof whose claimed tier disagrees with it, and runs the output check against
+// the authorized tier.
+func VerifyProof(proof *prover.Proof, authorizedTier string, a, b, c []int32) (bool, error) {
 	if proof == nil {
 		return false, fmt.Errorf("proof object cannot be nil")
+	}
+	if authorizedTier == "" {
+		return false, fmt.Errorf("authorized hardware tier is required (must come from trusted task metadata)")
+	}
+
+	// 0. The tier claimed in the proof must match the authorized tier. This blocks
+	// a worker from presenting an analog_range proof for a digital_exact task.
+	if proof.HardwareTier != authorizedTier {
+		return false, fmt.Errorf("hardware tier mismatch: task authorized %q but proof claims %q",
+			authorizedTier, proof.HardwareTier)
 	}
 
 	// 1. Re-compute input and output commitments from the raw arrays
@@ -71,14 +89,14 @@ func VerifyProof(proof *prover.Proof, a, b, c []int32) (bool, error) {
 		}
 	}
 
-	// 4. Verify the output itself.
+	// 4. Verify the output itself, against the AUTHORIZED tier (not the proof's).
 	//
 	// Checks 1-3 only prove the proof is internally consistent; none of them ties
 	// C to A and B, and the signature uses no secret, so a worker can hand-build a
 	// valid-looking proof for any C. The verifier must therefore check C against
 	// A x B on its own, using parameters it controls (never values taken from the
 	// request or the proof).
-	if err := verifyOutput(proof.HardwareTier, a, b, c); err != nil {
+	if err := verifyOutput(authorizedTier, a, b, c); err != nil {
 		return false, err
 	}
 
@@ -126,11 +144,30 @@ func matrixDim(cells int) (int, error) {
 	return n, nil
 }
 
-// freivalds probabilistically checks A x B == C over Z/2^32, the ring the ORCHID
-// kernels actually compute in (int32 arithmetic wraps mod 2^32). For a random
-// vector r it checks A(Br) == Cr; for any wrong C a single round passes with
-// probability at most 1/2, so rounds independent probes bound the false-accept
-// rate by 2^-rounds. Each round is O(n^2), versus O(n^3) to recompute the product.
+// freivalds probabilistically checks A x B == C over Z/2^32 — the ring the ORCHID
+// kernels actually compute in, since int32 multiply/add wrap mod 2^32. For a
+// random vector r it checks A(Br) == Cr; each round is O(n^2) versus O(n^3) to
+// recompute the product.
+//
+// False-acceptance bound. Let D = A*B - C (mod 2^32). If C is wrong then D != 0.
+// A round accepts only if D*r == 0. Take a row of D with a nonzero entry
+// d_j = 2^s * u, where u is odd and 0 <= s <= 31. Holding the other coordinates
+// of r fixed, D*r == 0 constrains d_j * r_j to a fixed residue; because u is a
+// unit mod 2^32, that congruence has a solution only when the residue is a
+// multiple of 2^s, and then exactly 2^s of the 2^32 values of r_j satisfy it.
+// Hence Pr[D*r == 0] <= 2^s / 2^32 <= 1/2, the worst case being s = 31 (e.g.
+// d_j = 2^31). Rounds use independent r, so Pr[accept a wrong C] <= 2^-rounds;
+// with rounds = 24 that is <= 2^-24 (~6e-8).
+//
+// Adversarial / overflow notes:
+//   - r is drawn from crypto/rand on each call and never sent to the worker, so a
+//     worker cannot shape C to pass a known r. The bound above is worst-case over
+//     all nonzero D, so it holds for adversarially chosen C.
+//   - "Overflow" is not a soundness gap: correctness is defined as A*B reduced
+//     mod 2^32 (the kernel's own semantics) and the check runs in that same ring.
+//     A C that differs from the integer product but equals it mod 2^32 is, by
+//     definition, the correct wrapped result.
+//   - If crypto/rand is unavailable the check fails closed (returns an error).
 func freivalds(n int, a, b, c []int32, rounds int) error {
 	au := asUint32(a)
 	bu := asUint32(b)

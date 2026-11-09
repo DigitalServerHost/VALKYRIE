@@ -40,7 +40,7 @@ func TestVerifier(t *testing.T) {
 	}
 
 	// Verify proof
-	valid, err := VerifyProof(proof, a, b, cObserved)
+	valid, err := VerifyProof(proof, "digital_exact", a, b, cObserved)
 	if err != nil {
 		t.Fatalf("Failed to verify valid proof: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestVerifier(t *testing.T) {
 	mutatedA := make([]int32, len(a))
 	copy(mutatedA, a)
 	mutatedA[0] = 99
-	valid, err = VerifyProof(proof, mutatedA, b, cObserved)
+	valid, err = VerifyProof(proof, "digital_exact", mutatedA, b, cObserved)
 	if err == nil {
 		t.Errorf("Expected error when verifying with mismatched inputs, but got nil")
 	}
@@ -62,7 +62,7 @@ func TestVerifier(t *testing.T) {
 
 	// Try verifying with mutated signature
 	proof.Signature[0] ^= 0xFF
-	valid, err = VerifyProof(proof, a, b, cObserved)
+	valid, err = VerifyProof(proof, "digital_exact", a, b, cObserved)
 	if err == nil {
 		t.Errorf("Expected error when signature is mutated, but got nil")
 	}

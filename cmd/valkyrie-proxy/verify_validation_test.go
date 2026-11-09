@@ -62,7 +62,7 @@ func TestHandleVerifyAcceptsValidProof(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate proof: %v", err)
 	}
-	body, _ := json.Marshal(VerifyRequest{Proof: proof, AData: a, BData: b, CData: c})
+	body, _ := json.Marshal(VerifyRequest{Proof: proof, AuthorizedTier: "digital_exact", AData: a, BData: b, CData: c})
 	rec := httptest.NewRecorder()
 	handleVerify(rec, httptest.NewRequest(http.MethodPost, "/verify", bytes.NewReader(body)))
 	if rec.Code != http.StatusOK {

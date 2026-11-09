@@ -78,7 +78,7 @@ func TestVerifierRejectsHandBuiltProofForWrongOutput(t *testing.T) {
 		Verified:         true,
 	}
 
-	valid, err := VerifyProof(forged, a, b, cWrong)
+	valid, err := VerifyProof(forged, "digital_exact", a, b, cWrong)
 	if valid || err == nil {
 		t.Fatalf("VerifyProof accepted a forged proof for C != A x B (valid=%v, err=%v)", valid, err)
 	}
@@ -103,8 +103,45 @@ func TestVerifierRejectsAnalogProofWithInflatedSigma(t *testing.T) {
 		t.Fatalf("GenerateProof unexpectedly refused (setup assumption changed): %v", err)
 	}
 
-	valid, err := VerifyProof(proof, a, b, cWrong)
+	valid, err := VerifyProof(proof, "analog_range", a, b, cWrong)
 	if valid || err == nil {
 		t.Fatalf("VerifyProof accepted an analog proof whose output is far from A x B (valid=%v, err=%v)", valid, err)
+	}
+}
+
+// TestVerifierEnforcesAuthorizedTier checks that a proof cannot be verified under
+// a tier other than the one the task authorized, even if the proof is otherwise
+// valid. This blocks a worker from downgrading a digital_exact task to the looser
+// analog_range check.
+func TestVerifierEnforcesAuthorizedTier(t *testing.T) {
+	n, a, b, _ := forgeryFixture()
+	cExact := make([]int32, n*n)
+	for i := 0; i < n; i++ {
+		for k := 0; k < n; k++ {
+			r := a[i*n+k]
+			for j := 0; j < n; j++ {
+				cExact[i*n+j] += r * b[k*n+j]
+			}
+		}
+	}
+	// An honest digital_exact proof for the correct output.
+	proof, _, err := prover.GenerateProof(prover.ProofParams{
+		TaskId: "task-tier", HardwareTier: "digital_exact", N: n, AData: a, BData: b, CObserved: cExact,
+	})
+	if err != nil {
+		t.Fatalf("GenerateProof: %v", err)
+	}
+
+	// Same tier as authorized: accepted.
+	if ok, err := VerifyProof(proof, "digital_exact", a, b, cExact); !ok || err != nil {
+		t.Fatalf("matching tier: got (%v, %v), want (true, nil)", ok, err)
+	}
+	// Authorized tier differs from the proof's claim: rejected.
+	if ok, err := VerifyProof(proof, "analog_range", a, b, cExact); ok || err == nil {
+		t.Fatalf("tier mismatch accepted (ok=%v, err=%v), want rejection", ok, err)
+	}
+	// Missing authorized tier: rejected.
+	if ok, err := VerifyProof(proof, "", a, b, cExact); ok || err == nil {
+		t.Fatalf("empty authorized tier accepted (ok=%v, err=%v), want rejection", ok, err)
 	}
 }
