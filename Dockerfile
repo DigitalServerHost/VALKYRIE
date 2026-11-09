@@ -26,5 +26,8 @@ EXPOSE 9001
 
 # The container is isolated by its own network namespace and reached via an
 # explicit published port, so it binds all interfaces inside the container.
+# Configured via environment so orchestrators can override without rewriting args.
+ENV VALKYRIE_HOST=0.0.0.0 \
+    VALKYRIE_PORT=9001
 ENTRYPOINT ["/valkyrie"]
-CMD ["--mode=server", "--host=0.0.0.0", "--port=9001"]
+CMD ["--mode=server"]

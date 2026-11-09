@@ -105,18 +105,42 @@ type VerifyResponse struct {
 // defaultBindHost keeps the proxy on the loopback interface unless an operator
 // explicitly opts into a wider interface (e.g. 0.0.0.0). The endpoints are
 // unauthenticated, so binding all interfaces by default would expose them to the
-// whole network.
-const defaultBindHost = "127.0.0.1"
+// whole network. VALKYRIE also runs as a remote auditor node, so operators can
+// widen the bind via the -host flag or the VALKYRIE_HOST environment variable.
+const (
+	defaultBindHost = "127.0.0.1"
+	defaultPort     = 9001
+)
 
 // listenAddr builds the bind address from a host and port.
 func listenAddr(host string, port int) string {
 	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
+// resolveBindDefaults chooses the default host and port from the environment,
+// falling back to loopback and defaultPort. Explicit -host/-port flags still take
+// precedence because these only set the flag defaults. getenv is injected for
+// testability (pass os.Getenv in production).
+func resolveBindDefaults(getenv func(string) string) (string, int) {
+	host := defaultBindHost
+	if v := getenv("VALKYRIE_HOST"); v != "" {
+		host = v
+	}
+	port := defaultPort
+	if v := getenv("VALKYRIE_PORT"); v != "" {
+		if p, err := strconv.Atoi(v); err == nil && p > 0 {
+			port = p
+		}
+	}
+	return host, port
+}
+
 func main() {
+	defHost, defPort := resolveBindDefaults(os.Getenv)
+
 	mode := flag.String("mode", "server", "Execution mode: server, test")
-	host := flag.String("host", defaultBindHost, "Host/interface to bind in server mode (use 0.0.0.0 to listen on all interfaces)")
-	port := flag.Int("port", 9001, "Port for the HTTP proxy daemon")
+	host := flag.String("host", defHost, "Host/interface to bind in server mode (env: VALKYRIE_HOST; use 0.0.0.0 for all interfaces)")
+	port := flag.Int("port", defPort, "Port for the HTTP proxy daemon (env: VALKYRIE_PORT)")
 	flag.Parse()
 
 	if *mode == "test" {
